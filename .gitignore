@@ -1,0 +1,8 @@
+# Ignore local secrets / junk that may live next to the skill during dev
+*.env
+*.env.*
+!.env.example
+__pycache__/
+*.pyc
+.DS_Store
+*.log
