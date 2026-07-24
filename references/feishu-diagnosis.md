@@ -1,14 +1,10 @@
 # Feishu Multi-Profile Diagnosis Recipes
 
-Condensed, re-runnable procedures for the per-profile gotchas in the
-parent SKILL.md (Pitfalls #14–#16, #11–#13). Use these instead of
-re-deriving each time.
+Run these when the generic steps in `SKILL.md` are not enough.
 
 ## 1. Strip cloned Feishu creds before configuring a new profile
 
-A cloned profile ships with the SOURCE's `FEISHU_*` lines. Replace them
-with the new app's values (encrypt key left blank unless the app has a
-加密策略 key — Pitfall #8b).
+`hermes profile create <new> --clone-from <src>` copies `<src>/.env` wholesale. Remove the source's `FEISHU_*` lines before enabling the new app.
 
 ```bash
 python - "$HERMES_HOME/profiles/<new>/.env" <<'PY'
@@ -18,36 +14,28 @@ s = open(p, encoding="utf-8").read()
 for k in ("FEISHU_APP_ID","FEISHU_APP_SECRET","FEISHU_VERIFICATION_TOKEN",
           "FEISHU_ENCRYPT_KEY","FEISHU_HOME_CHANNEL","FEISHU_HOME_CHANNEL_THREAD_ID"):
     s = re.sub(rf'(?m)^{k}=.*\n', '', s)
-# append new app's four values here, then:
 open(p,"w",encoding="utf-8").write(s)
 PY
 ```
-Verify no source `FEISHU_APP_ID` lingers:
-`grep -nE "^FEISHU_APP_ID=" "$HERMES_HOME/profiles/<new>/.env"`
+
+Verify: `grep -nE "^FEISHU_APP_ID=" "$HERMES_HOME/profiles/<new>/.env"` should return nothing. Then append the new app's values (encrypt key blank unless 加密策略 shows one; see SKILL.md Pitfall #8).
 
 ## 2. Locate the real gateway log (filename varies per profile)
 
-`logs/gateway.log` is NOT guaranteed. If it's missing, list the dir and
-grep the actual files:
+`logs/gateway.log` is not guaranteed. If it is missing, list the directory and grep the real files:
 
 ```bash
-ls "$HERMES_HOME/profiles/<new>/logs/"
-grep -rIlE "connected|Received raw message" "$HERMES_HOME/profiles/<new>/logs/"
+ls "$HERMES_HOME/profiles/<profile>/logs/"
+grep -rIlE "connected|Received raw message" "$HERMES_HOME/profiles/<profile>/logs/"
 ```
 
-Real WS-connected line (even when log is named `gateway-stdio.log`):
-`[Lark] connected to wss://msg-frontier.feishu.cn/ws/v2?...`
+Decisive WS-up line: `[Lark] connected to wss://msg-frontier.feishu.cn/ws/v2?...`
 
-`gateway-exit-diag.log` may show non-zero exits from a PREVIOUS restart's
-old PID — ignore if a current `pythonw` PID is alive and WS shows
-connected. Confirm alive PIDs: `tasklist | find "pythonw"`.
+`gateway-exit-diag.log` may show non-zero exits from a **previous** restart's old PID. Ignore those if a current `pythonw` PID is alive and WS shows connected. Confirm alive PIDs: `tasklist | find "pythonw"`.
 
 ## 3. Add a missing `gateway:` section to config.yaml
 
-Cloned profiles often have NO `gateway:` block (file may end at
-`image_gen:`). A python/heredoc append that searches for `gateway:` can
-mis-detect (`use_gateway: true` contains the substring) and write
-nothing. Use a deterministic file-tool patch anchored on the last line:
+Cloned profiles often have no `gateway:` block (file may end at `image_gen:`). Do NOT append with a generic `python -c "..."` that searches for `gateway:` — `use_gateway: true` contains that substring and can silently write nothing. Use a deterministic file-tool patch anchored on the file's last line:
 
 ```yaml
 image_gen:
@@ -59,65 +47,40 @@ gateway:
       enabled: true
 ```
 
-Verify: `grep -nE "gateway:|feishu:|enabled" "$HERMES_HOME/profiles/<new>/config.yaml"`
+Verify: `grep -nE "gateway:|feishu:|enabled" "$HERMES_HOME/profiles/<profile>/config.yaml"`.
 
-## 4. Bypass an expiring pairing code
+## 4. Bypass expiring pairing codes
 
-Feishu pairing codes live ~1–2 min; screenshot-then-approve usually
-expires. Prefer: user pastes bare code text →
-`hermes -p <new> pairing approve feishu <CODE>` immediately.
+Pairing codes live ~1–2 minutes; screenshot-then-approve usually expires. Prefer: user pastes bare code text → `hermes -p <profile> pairing approve feishu <CODE>` immediately.
 
 If codes keep expiring, write the open_id directly:
 
 ```bash
-# Get the correct ou_ id from THIS profile's feishu-pending.json
-python - "$HERMES_HOME/profiles/<new>/platforms/pairing/feishu-pending.json" <<'PY'
+# Get the user's open_id from THIS profile's feishu-pending.json
+python - "$HERMES_HOME/profiles/<profile>/platforms/pairing/feishu-pending.json" <<'PY'
 import sys, json, time, os
 p = sys.argv[1]
-d = json.load(open(p, encoding="utf-8"))
-uid = next(iter(d.values()))["user_id"]   # first pending user_id
 out = os.path.join(os.path.dirname(p), "feishu-approved.json")
+with open(p, encoding="utf-8") as f:
+    d = json.load(f)
+uid = next(iter(d.values()))["user_id"]
 data = {uid: {"user_name": "", "approved_at": time.time()}}
-json.dump(data, open(out, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
 print("approved", uid)
 PY
-hermes -p <new> gateway restart
+hermes -p <profile> gateway restart
 ```
-⚠️ Use THIS profile's own `ou_*` id — never copy an id from another
-profile (each Feishu app mints a different open_id for the same human,
-Pitfall #13).
 
-## 5. Isolation proof (after all profiles up)
+Use THIS profile's own `ou_*` id. Each Feishu app mints a different open_id for the same human; copying an approved ID from another profile's `feishu-approved.json` will not match.
 
-Each profile's `FEISHU_HOME_CHANNEL` (set via DM `/sethome`, since group
-delivery is unreliable — Pitfall #10) must be DISTINCT:
+## 5. Isolation proof
+
+Each profile's `FEISHU_HOME_CHANNEL` must be distinct:
 
 ```bash
 for f in "$HERMES_HOME"/profiles/*/.env; do
-  echo "$f:"; grep -E "^FEISHU_HOME_CHANNEL=" "$f" | sed 's/=.*/=<set>/'
+  echo "$f:"
+  grep -E "^FEISHU_HOME_CHANNEL=" "$f" | sed 's/=.*/=<set>/'
 done
 ```
-
-## 6. Default profile has NO autostart — register it explicitly
-
-Per-profile `gateway install --start-on-login` creates Startup `.vbs`
-items for coder/trder/etc., but the DEFAULT gateway is NOT auto-registered
-by those commands. After a reboot the default silently dies ("feishu no
-response", no `gateway.pid`, no log activity) because the process was never
-started. Register it separately, with NO `--profile` flag:
-
-```bash
-hermes gateway install --start-on-login --no-start-now
-# → creates Hermes_Gateway.vbs (no _<profile> suffix) in Startup folder
-```
-
-Verify all employees self-heal after a reboot:
-
-```bash
-ls "$APPDATA/Microsoft/Windows/Start Menu/Programs/Startup/" | grep -i hermes
-tasklist | find "pythonw"   # one PID per employee
-```
-
-On ANY "no response" report, STEP 0 is `tasklist | find "pythonw"` —
-a missing PID means "start it" (`hermes gateway start`), not "debug the
-config".
