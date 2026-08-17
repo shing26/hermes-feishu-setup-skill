@@ -1,7 +1,7 @@
 ---
 name: hermes-feishu-setup
-description: "Configure the Hermes Feishu/Lark messaging gateway — single bot or multi-profile isolation with independent cron delivery. Use when connecting a Feishu bot, setting /sethome, registering Windows gateway autostart, debugging a connected-but-silent bot, or isolating multiple Hermes profiles with separate Feishu apps."
-version: 1.2.0
+description: "Configure the Hermes Feishu/Lark messaging gateway — single bot or multi-profile isolation with independent cron delivery. Use when connecting a Feishu bot, setting /sethome, registering Windows gateway autostart, isolating multiple Hermes profiles with separate Feishu apps, or debugging message-delivery failures."
+version: 1.3.0
 author: Hermes Agent Contributors
 license: MIT
 platforms: [windows, linux, macos]
@@ -16,7 +16,7 @@ Configure Hermes <-> Feishu (Lark) bot integration with per-profile isolation.
 
 ## Leading word
 
-**connected-but-silent** — a bot that shows `✓ feishu connected` but never receives messages. The most common failure mode; the diagnosis order below is fixed.
+**feishu-gateway-setup** — set up or repair the Hermes <-> Feishu connection so a profile reliably receives messages and delivers cron output to the right channel.
 
 ## Architecture
 
@@ -72,16 +72,24 @@ gateway:
 
 **Completion criterion**: `config.yaml` has `gateway.platforms.feishu.enabled: true`.
 
-### 4. Register Windows startup (per profile)
+### 4. Register gateway startup (cross-platform)
 
+**Windows**:
 ```bash
 hermes -p <profile> gateway install --start-on-login --no-start-now
 ```
-
 The launcher bakes in `HERMES_HOME=<profile home>` AND `--profile <name>`.
 The default profile needs explicit registration without `--profile`.
+UAC elevation may auto-fallback to a Startup-folder `.vbs`; that still auto-starts on login.
 
-**Completion criterion**: Startup entry exists; `tasklist | find "pythonw"` shows the gateway PID after start.
+**Linux/macOS**:
+Configure a systemd user service, launchd plist, or your init system of choice to run:
+```bash
+hermes -p <profile> gateway start
+```
+Ensure `HERMES_HOME` is set to the profile home directory.
+
+**Completion criterion**: Gateway starts automatically on login/reboot; platform-specific process list shows the gateway PID.
 
 ### 5. Start gateway
 
@@ -133,13 +141,11 @@ Decisive log line: `[Feishu] Received raw message type=... message_id=...`.
 7. **Check the RIGHT log.** Each profile writes its own `<profile>/logs/`.
 8. **`FEISHU_VERIFICATION_TOKEN` is required; `FEISHU_ENCRYPT_KEY` is conditional.** Encryption off + key filled = 4ms FAIL.
 9. **Feishu console changes need RE-PUBLISH.** Adding events/granting permissions are draft changes.
-10. **Pairing codes expire in ~1–2 min.**
-11. **Each Feishu app issues a different `open_id` for the same human.**
-12. **DEFAULT profile has NO autostart.** Needs explicit `gateway install --start-on-login` without `--profile`.
+10. **DEFAULT profile has NO autostart.** Needs explicit `gateway install --start-on-login` without `--profile`.
 
 ## Verification checklist
 
-- [ ] `tasklist | find "pythonw"` shows one PID per profile gateway.
+- [ ] `tasklist | find "pythonw"` (Windows) or systemd/launchd status shows one gateway process per profile.
 - [ ] Each `<profile>/logs/` shows `connected` and `✓ feishu connected`.
 - [ ] `/sethome` in each chat writes a DISTINCT `FEISHU_HOME_CHANNEL`.
 - [ ] Sending a DM produces an `Inbound ... message received` line in THAT profile's log.
