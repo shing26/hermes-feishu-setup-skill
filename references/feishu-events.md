@@ -4,10 +4,10 @@
 
 | Event (CN) | Code | Why needed |
 |------------|------|------------|
-| 接收消息 v2.0 | `im.message.receive_v1` | Pushes user messages to the bot. Without this, nothing the user types arrives. |
+| 接收消息 v2.0 | `im.message.receive_v1` | Pushes user messages to the bot. Without this, nothing arrives. |
 | 机器人进群 v2.0 | `im.chat.member.bot.added_v1` | Bot-added-to-chat event (proves WS tunnel works, but does **not** prove messaging works). |
 
-`im.message.receive_v1` must be subscribed under **应用身份** (application identity). The `用户身份订阅` tab does **not** contain a message-receive event — do not send the user looking there.
+`im.message.receive_v1` must be subscribed under **应用身份**. The `用户身份订阅` tab does **not** contain a message-receive event.
 
 > The bot-added event alone is insufficient. `Bot added to chat` in the gateway log does **not** prove messages flow; `im.message.receive_v1` is the actual gating event.
 
@@ -24,21 +24,21 @@ Read Feishu Open Platform → **运营监控 → 日志检索** first. Search th
 
 | Feishu `receive_v1` status | Hermes `Received raw message`? | Meaning / fix |
 |----------------------------|--------------------------------|---------------|
-| SUCCESS | ABSENT | Feishu pushed, Hermes dropped it. Cause: (a) `receive_v1` not under 应用身份, or (b) `FEISHU_VERIFICATION_TOKEN` / `FEISHU_ENCRYPT_KEY` blank (decrypt/verify fails silently before the log line). |
-| FAIL (4ms typical) | ABSENT | Feishu pushed, Hermes rejected almost instantly. Almost always a bad/mismatched `FEISHU_ENCRYPT_KEY` or `FEISHU_VERIFICATION_TOKEN`, or `ENCRYPT_KEY` set while Feishu side sends plaintext (encryption disabled in console). |
-| no `receive_v1` row at all | ABSENT | Feishu never generated the event → event/permission not truly live. Verify the event is added **and** the app version was re-published (版本管理与发布). |
+| SUCCESS | ABSENT | Feishu pushed, Hermes dropped it. Cause: (a) `receive_v1` not under 应用身份, or (b) keys blank. |
+| FAIL (4ms typical) | ABSENT | Bad/mismatched `FEISHU_ENCRYPT_KEY` or `FEISHU_VERIFICATION_TOKEN`. |
+| No `receive_v1` row at all | ABSENT | Feishu never generated the event. Verify event added and app version re-published. |
 
 ## 4ms FAIL = over-encryption, not under
 
-When 日志检索 shows `receive_v1` = FAIL in ~4ms (not absent, not a slow timeout), the signature is: `FEISHU_ENCRYPT_KEY` is set in `.env` while the app's 加密策略 is disabled. Feishu sends plaintext → adapter tries to decrypt → fails fast.
+When 日志检索 shows `receive_v1` = FAIL in ~4ms, the signature is: `FEISHU_ENCRYPT_KEY` is set in `.env` while the app's 加密策略 is disabled.
 
-Fix: **remove** `FEISHU_ENCRYPT_KEY` (leave blank) unless 加密策略 actually shows a key. The inverse failure mode (blank + app encrypts) shows as SUCCESS-but-no-`Received raw message`.
+Fix: **remove** `FEISHU_ENCRYPT_KEY` unless 加密策略 actually shows a key.
 
 ## DM works, group does not
 
-`Inbound dm message received` proves the DM path is fine. A group `chat_id` may still never appear. Blockers: bot not actually in the group; message not @-bot; group @-message sub-permission (`获取群组中用户@机器人消息`) missing from published version. Validate separately; if group keeps failing, fall back to DM `/sethome`.
+`Inbound dm message received` proves the DM path is fine. Blockers: bot not in group; message not @-bot; group @-message sub-permission missing.
 
-## What a healthy inbound looks like
+## Healthy inbound example
 
 ```
 [Feishu] Inbound dm message received: id=om_xxx type=text
