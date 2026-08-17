@@ -1,49 +1,53 @@
-# Hermes Feishu/Lark Gateway Setup Skill
+# Hermes Feishu / Lark Gateway Setup Skill
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A reusable [Hermes Agent](https://github.com/NousResearch/hermes-agent) skill that configures the
 Hermes ↔ Feishu (Lark) messaging gateway — for a single bot **or** multiple isolated
 profiles, each with its own Feishu app, its own gateway process, and its own cron-delivery
 channel.
 
-> Distilled from a real multi-day debugging session where a Feishu bot reported
-> `✓ feishu connected` but never received a single user message. Every pitfall below
-> is a failure mode that actually happened — the skill exists to stop you re-living them.
+## Why this exists
 
-## What it covers
+This skill was distilled from a real multi-day debugging session where a Feishu bot reported
+`✓ feishu connected` but never received a single user message. Every pitfall below is a
+failure mode that actually happened, and this skill encodes the proven fixes.
 
-- Connecting a Feishu/Lark bot to Hermes (the `Feishu / Lark encrypt key`, `Verification token`,
-  `Home channel ID` config form).
+## What this skill covers
+
+- Connect a Feishu/Lark bot to Hermes (configuring `Feishu / Lark encrypt key`,
+  `Verification token`, `Home channel ID`, and event subscriptions).
 - **Per-profile isolation**: one independent Feishu app + gateway process per Hermes profile,
-  so multiple "employees"/tenants stay physically separated (`FEISHU_HOME_CHANNEL` and
-  `FEISHU_APP_ID` are per-`HERMES_HOME`).
-- `/sethome` home-channel setup for cron / notification delivery.
-- Windows startup registration (incl. the UAC → Startup-folder fallback).
-- The Feishu event-subscription traps that silently block inbound messages:
-  - `im.message.receive_v1` must be subscribed (not just `机器人进群`).
-  - `FEISHU_VERIFICATION_TOKEN` is required; `FEISHU_ENCRYPT_KEY` is required **only** if the
-    app's 加密策略 page shows a key (filling it when encryption is off → 4ms FAIL).
-  - Feishu long-connection does **not** hot-load console changes — you must re-publish the
-    app version **and** restart the gateway.
-  - Pairing codes expire in ~1–2 min; clone-created profiles carry the source's Feishu creds;
-    the default profile has no autostart; the gateway log file name varies per profile.
+  so multiple "employees"/tenants stay physically separated.
+- `/sethome` home-channel setup for cron and notification delivery.
+- Windows startup registration, including the UAC → Startup-folder fallback.
+- The Feishu event-subscription traps that silently block inbound messages.
 
-## Install (into Hermes)
+## When to use it
+
+Use this skill when you want to:
+
+- connect a Feishu/Lark bot to Hermes
+- configure `/sethome`, home channel, or where cron results get delivered
+- run multiple Hermes profiles with their own Feishu bot, app, and channel
+- make the gateway survive reboots / start automatically on Windows
+- debug "bot connected but no messages arrive" on Feishu
+
+## Quick install
 
 ```bash
-# From the Hermes skills hub (if published):
 hermes skills install hermes-feishu-setup
-
-# Or manually — drop the folder into your skills dir:
-#   ~/.hermes/skills/hermes-feishu-setup/   (or $HERMES_HOME/skills/...)
-# then reload:
 hermes reload-skills
 ```
+
+Or manually copy this repo into your skills directory and reload skills.
 
 ## Usage
 
 Invoke the skill in a Hermes session, or just describe the task:
-"connect a Feishu bot to my `analyst` profile and make its cron post to a dedicated group",
-"my Feishu bot says connected but never replies — fix it".
+
+- "connect a Feishu bot to my `analyst` profile and make its cron post to a dedicated group"
+- "my Feishu bot says connected but never replies — fix it"
 
 The skill walks through: Feishu Open Platform setup → credentials in the profile `.env` →
 `config.yaml` enablement → gateway start/install → `/sethome`.
@@ -52,14 +56,35 @@ The skill walks through: Feishu Open Platform setup → credentials in the profi
 
 ```
 hermes-feishu-setup/
-├── SKILL.md                       # steps + 17 field-tested pitfalls
+├── SKILL.md                       # steps + pitfalls + verification checklist
 ├── references/
-│   ├── feishu-events.md           # event codes, permissions, "connected-but-silent" diagnosis table
+│   ├── feishu-events.md           # event codes, permissions, connected-but-silent diagnosis
 │   └── feishu-diagnosis.md        # re-runnable per-profile fix recipes
 ├── LICENSE                        # MIT
 ├── CONTRIBUTING.md
 └── README.md
 ```
+
+## Key concepts
+
+- **Hermes profile**: an isolated Hermes config/cron/identity context.
+- **Feishu app**: an enterprise self-built app on the Feishu Open Platform.
+- **Home channel**: the Feishu chat where a profile's cron/notification output is delivered.
+- **Long connection**: the Feishu event WebSocket mode; draft changes only take effect after
+  re-publishing the app version.
+
+## Common pitfalls
+
+- `im.message.receive_v1` must be subscribed under **应用身份**.
+- `FEISHU_VERIFICATION_TOKEN` is required; `FEISHU_ENCRYPT_KEY` is required **only** if the
+  app's **加密策略** page shows a key.
+- Feishu long-connection does **not** hot-load console changes — you must re-publish the app
+  version **and** restart the gateway.
+- Pairing codes expire in about 1–2 minutes.
+- Each Feishu app issues a different `open_id` for the same user.
+
+For a fuller pitfall list and runnable fixes, see [SKILL.md](SKILL.md) and
+[`references/feishu-diagnosis.md`](references/feishu-diagnosis.md).
 
 ## License
 
