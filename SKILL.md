@@ -105,6 +105,40 @@ In the Feishu chat (DM works reliably; group requires @-bot), send `/sethome`.
 
 **Completion criterion**: Profile `.env` contains `FEISHU_HOME_CHANNEL=<chat_id>`.
 
+## Optional: Gateway guardian
+
+For multi-profile setups, a lightweight monitor can detect dead or stale gateways and restart them.
+
+Script: `scripts/guardian.py`
+
+```bash
+# Single profile
+python scripts/guardian.py -p analyst
+
+# All profiles under HERMES_HOME
+python scripts/guardian.py --all
+
+# One-shot check (for cron or Task Scheduler)
+python scripts/guardian.py --all --once
+
+# Daemon mode (default)
+python scripts/guardian.py --all
+```
+
+Environment:
+- `HERMES_HOME` — Hermes home directory (default `~/.hermes`)
+- `GUARDIAN_INTERVAL` — seconds between checks (default `60`)
+- `GUARDIAN_STALE` — seconds without inbound before restart (default `120`)
+- `GUARDIAN_LOG` — guardian log path (default `HERMES_HOME/logs/guardian.log`)
+
+Behavior:
+- Detects platform (Windows/Linux/macOS) for process listing.
+- Checks each profile: gateway process alive AND recent inbound activity.
+- Restarts dead or stale gateways.
+- Writes one line per check to guardian log.
+
+**Completion criterion**: Guardian log shows `PROFILE <name>: ok` for all monitored profiles.
+
 ## connected-but-silent diagnosis
 
 When a bot shows `✓ feishu connected` but never receives messages, follow this fixed order.
