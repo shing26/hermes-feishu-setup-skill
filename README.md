@@ -56,6 +56,23 @@ This is especially valuable when:
 - you need **per-profile approval lists** so different users can DM different bots
 - you want **per-profile autostart/restart** so one broken profile does not block the others
 
+## Real-world scenarios
+
+**1. Shared CI server: frontend + backend + ML pipelines**
+A company runs three product lines on one CI machine. Without isolation, build results from frontend, backend, and ML training all land in the same Feishu group. With multi-profile isolation, each product line gets its own profile, its own bot, and its own home channel. Teams only see the notifications that belong to them.
+
+**2. Open source maintainer: project bot vs personal assistant**
+An OSS maintainer runs one bot for triaging issues and releases, and another for personal task management. If they share a Feishu app, contributor pairing requests and personal cron output mix together, and a spammy contributor can disrupt both. Isolation keeps the project bot and personal bot in separate Feishu apps with separate approval lists.
+
+**3. Agency serving multiple clients: client A and client B**
+An agency hosts deployments for two clients on the same server. Without isolation, deployment notifications and credentials for both clients are mixed into one profile, and a misconfiguration by one client can affect the other. Each client gets its own profile, its own Feishu app, its own home channel, and its own encryption settings.
+
+**4. Workshop host: event bot + community bot + personal bot**
+A technical educator runs three bots: one for workshop registration and reminders, one for community Q&A, and one for personal use. Without isolation, workshop spam can flood the community channel, and community pairing codes can accidentally approve personal cron jobs. Each bot gets its own profile and home channel, so failures and messages stay scoped.
+
+**5. Startup founder: internal ops vs investor updates**
+A founder needs one bot for internal operations (CI alerts, server metrics, team notifications) and another for investor updates (monthly metrics, milestones). Without isolation, a misrouted internal alert can leak sensitive data to investors. Isolation keeps internal messages in the core-team channel and investor updates in a separate, restricted channel.
+
 ## Prerequisites
 
 - Hermes Agent installed and running on Windows, Linux, or macOS.
