@@ -22,35 +22,126 @@ failure mode that actually happened, and this skill encodes the proven fixes.
 - `/sethome` home-channel setup for cron and notification delivery.
 - Windows startup registration, including the UAC → Startup-folder fallback.
 - The Feishu event-subscription traps that silently block inbound messages.
+- Optional gateway guardian script for multi-profile monitoring and auto-repair.
 
-## When to use it
+## Prerequisites
 
-Use this skill when you want to:
+- Hermes Agent installed and running on Windows, Linux, or macOS.
+- A Feishu/Lark **enterprise account** with permission to create self-built apps on the
+  [Feishu Open Platform](https://open.feishu.cn/).
+- For multi-profile isolation: multiple Feishu apps (one per profile), each with its own
+  `App ID` and `App Secret`.
 
-- connect a Feishu/Lark bot to Hermes
-- configure `/sethome`, home channel, or where cron results get delivered
-- run multiple Hermes profiles with their own Feishu bot, app, and channel
-- make the gateway survive reboots / start automatically on Windows
-- debug "bot connected but no messages arrive" on Feishu
+## Quick start (5 minutes)
 
-## Quick install
+Follow these steps to go from "new Feishu app" to "receiving messages in Hermes".
+
+### 1. Create and configure the Feishu app
+
+On the Feishu Open Platform:
+
+1. Create an **enterprise self-built app**.
+2. Enable **bot** capability and choose **长连接 (WebSocket)** mode.
+3. Add event `接收消息` (`im.message.receive_v1`) under **事件订阅 → 应用身份**.
+4. Grant permission `im:message`.
+5. **Re-publish** the app version.
+
+Expected result: in **运营监控 → 日志检索**, a test message shows `receive_v1` with
+`SUCCESS` status.
+
+### 2. Write credentials to the profile `.env`
+
+Append to `$HERMES_HOME/profiles/<profile>/.env`:
 
 ```bash
-hermes skills install hermes-feishu-setup
-hermes reload-skills
+FEISHU_APP_ID=cli_xxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxx
+FEISHU_VERIFICATION_TOKEN=xxxxxxxx   # REQUIRED
+# FEISHU_ENCRYPT_KEY=xxxxxxxx        # ONLY if 加密策略 page shows a key
 ```
 
-Or manually copy this repo into your skills directory and reload skills.
+Verify: `grep -nE "^FEISHU_(APP_ID|APP_SECRET|VERIFICATION_TOKEN)=" <profile>/.env`
 
-## Usage
+### 3. Enable feishu in `config.yaml`
 
-Invoke the skill in a Hermes session, or just describe the task:
+```yaml
+gateway:
+  platforms:
+    feishu:
+      enabled: true
+```
 
-- "connect a Feishu bot to my `analyst` profile and make its cron post to a dedicated group"
-- "my Feishu bot says connected but never replies — fix it"
+### 4. Start the gateway
 
-The skill walks through: Feishu Open Platform setup → credentials in the profile `.env` →
-`config.yaml` enablement → gateway start/install → `/sethome`.
+```bash
+hermes -p <profile> gateway start
+```
+
+Expected log output:
+
+```
+[Feishu] connected to wss://msg-frontier.feishu.cn/ws/v2?...
+[Feishu] Received raw message type=text message_id=om_xxx ...
+```
+
+### 5. Set the home channel
+
+In the Feishu chat (DM works reliably; group requires @-bot), send:
+
+```
+/sethome
+```
+
+Expected result: `FEISHU_HOME_CHANNEL=oc_xxx` appears in the profile's `.env`.
+
+### 6. Register startup (optional)
+
+**Windows**: `hermes -p <profile> gateway install --start-on-login --no-start-now`  
+**Linux/macOS**: add a systemd user service or launchd plist that runs
+`HERMES_HOME=<path> hermes -p <profile> gateway start`.
+
+## Gateway guardian (optional)
+
+For multi-profile setups, `scripts/guardian.py` monitors gateway health and restarts stale
+or dead processes.
+
+```bash
+# All profiles
+python scripts/guardian.py --all
+
+# One-shot (for cron / Task Scheduler)
+python scripts/guardian.py --all --once
+```
+
+See `SKILL.md` for environment variables and behavior details.
+
+## Common pitfalls
+
+- `im.message.receive_v1` must be subscribed under **应用身份**.
+- `FEISHU_VERIFICATION_TOKEN` is required; `FEISHU_ENCRYPT_KEY` is required **only** if the
+  app's **加密策略** page shows a key.
+- Feishu long-connection does **not** hot-load console changes — you must re-publish the app
+  version **and** restart the gateway.
+- Each Feishu app issues a different `open_id` for the same user.
+
+For a fuller pitfall list and runnable fixes, see [SKILL.md](SKILL.md) and
+[`references/feishu-diagnosis.md`](references/feishu-diagnosis.md).
+
+## What you should see when it works
+
+A successful inbound DM looks like:
+
+```
+[Feishu] Inbound dm message received: id=om_xxx type=text
+         chat_id=oc_xxx sender=user:ou_xxx text='/sethome' ...
+[Feishu] Sending response (...) to oc_xxx
+```
+
+After `/sethome`, the profile's `.env` contains:
+
+```
+FEISHU_HOME_CHANNEL=oc_xxx
+```
 
 ## Layout
 
@@ -60,31 +151,21 @@ hermes-feishu-setup/
 ├── references/
 │   ├── feishu-events.md           # event codes, permissions, connected-but-silent diagnosis
 │   └── feishu-diagnosis.md        # re-runnable per-profile fix recipes
+├── scripts/
+│   └── guardian.py                # optional multi-profile monitoring + auto-repair
+├── CHANGELOG.md                   # version history
 ├── LICENSE                        # MIT
 ├── CONTRIBUTING.md
 └── README.md
 ```
 
-## Key concepts
+## Versioning
 
-- **Hermes profile**: an isolated Hermes config/cron/identity context.
-- **Feishu app**: an enterprise self-built app on the Feishu Open Platform.
-- **Home channel**: the Feishu chat where a profile's cron/notification output is delivered.
-- **Long connection**: the Feishu event WebSocket mode; draft changes only take effect after
-  re-publishing the app version.
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-## Common pitfalls
+## Contributing
 
-- `im.message.receive_v1` must be subscribed under **应用身份**.
-- `FEISHU_VERIFICATION_TOKEN` is required; `FEISHU_ENCRYPT_KEY` is required **only** if the
-  app's **加密策略** page shows a key.
-- Feishu long-connection does **not** hot-load console changes — you must re-publish the app
-  version **and** restart the gateway.
-- Pairing codes expire in about 1–2 minutes.
-- Each Feishu app issues a different `open_id` for the same user.
-
-For a fuller pitfall list and runnable fixes, see [SKILL.md](SKILL.md) and
-[`references/feishu-diagnosis.md`](references/feishu-diagnosis.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

@@ -38,6 +38,8 @@ Fix: **remove** `FEISHU_ENCRYPT_KEY` unless 加密策略 actually shows a key.
 
 `Inbound dm message received` proves the DM path is fine. Blockers: bot not in group; message not @-bot; group @-message sub-permission missing.
 
+If you cannot find **事件订阅 → 加密策略** under **应用身份**, check **应用身份 → 事件与回调**; Feishu occasionally renames the sidebar entry, but the page contents are unchanged.
+
 ## Healthy inbound example
 
 ```

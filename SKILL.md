@@ -1,6 +1,6 @@
 ---
 name: hermes-feishu-setup
-description: "Configure the Hermes Feishu/Lark messaging gateway — single bot or multi-profile isolation with independent cron delivery. Use when connecting a Feishu bot, setting /sethome, registering Windows gateway autostart, isolating multiple Hermes profiles with separate Feishu apps, or debugging message-delivery failures."
+description: "Configure the Hermes Feishu/Lark messaging gateway — connect a bot, set /sethome, register startup, or debug message-delivery failures. Use when the task is `feishu-gateway-setup`."
 version: 1.3.0
 author: Hermes Agent Contributors
 license: MIT
