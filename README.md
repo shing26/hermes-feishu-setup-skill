@@ -24,6 +24,38 @@ failure mode that actually happened, and this skill encodes the proven fixes.
 - The Feishu event-subscription traps that silently block inbound messages.
 - Optional gateway guardian script for multi-profile monitoring and auto-repair.
 
+## Why multi-profile isolation matters
+
+Without isolation, a single Feishu app and gateway process serves all profiles. That creates
+three concrete problems:
+
+1. **Channel bleed.** `FEISHU_HOME_CHANNEL` is a single value. One profile's cron job posts
+   to the same chat as every other profile. You cannot give `coder` a dev-only channel and
+   `analyst` a business channel without them stepping on each other.
+2. **Credential and identity mixing.** A single Feishu app issues one set of credentials and
+   one `open_id` per user. If two profiles need different bot identities, or need to approve
+   different sets of users, they cannot share one app cleanly.
+3. **Single point of failure.** One gateway crash or provider error knocks out every profile
+   at once. With independent processes, `coder` can be down while `analyst` keeps running.
+
+**Multi-profile isolation** solves this by giving each Hermes profile:
+
+- its **own Feishu app** (`FEISHU_APP_ID` / `FEISHU_APP_SECRET` per `.env`)
+- its **own gateway process** (`hermes -p <profile> gateway start`)
+- its **own home channel** (`FEISHU_HOME_CHANNEL` written by `/sethome` in that profile's
+  chat)
+
+Result: each profile behaves like an independent "employee" with its own bot, its own
+channel, and its own restart cycle. Debugging, permissions, and cron delivery stay
+**contained inside one profile** instead of spreading across a shared process.
+
+This is especially valuable when:
+
+- you run **separate bots** for work and personal use
+- you onboard **new team members** and want each person to have an isolated context
+- you need **per-profile approval lists** so different users can DM different bots
+- you want **per-profile autostart/restart** so one broken profile does not block the others
+
 ## Prerequisites
 
 - Hermes Agent installed and running on Windows, Linux, or macOS.
